@@ -1,0 +1,226 @@
+diff -ruN a/include/wimlib/file_io.h
+--- a/include/wimlib/file_io.h
++++ b/include/wimlib/file_io.h
+@@ -3,6 +3,7 @@
+ 
+ #include <stdbool.h>
+ #include <stddef.h>
++#include <stdint.h>
+ #include <sys/types.h>
+ 
+ /* Wrapper around a file descriptor that keeps track of offset (including in
+@@ -12,8 +13,15 @@
+ 	int fd;
+ 	unsigned int is_pipe : 1;
+ 	off_t offset;
++	/* Kiln: when set, reads come from this callback and fd is
++	 * FILEDES_READER_FD (valid, never closed).  */
++	int (*read_fn)(void *ctx, void *buf, size_t count, uint64_t offset);
++	void *read_ctx;
++	uint64_t read_size;
+ };
+ 
++#define FILEDES_READER_FD (-2)
++
+ int
+ full_read(struct filedes *fd, void *buf, size_t n);
+ 
+@@ -41,6 +49,9 @@
+ 	fd->fd = raw_fd;
+ 	fd->offset = 0;
+ 	fd->is_pipe = 0;
++	fd->read_fn = NULL;
++	fd->read_ctx = NULL;
++	fd->read_size = 0;
+ }
+ 
+ static inline void filedes_invalidate(struct filedes *fd)
+@@ -48,7 +59,7 @@
+ 	fd->fd = -1;
+ }
+ 
+-#define filedes_close(f) close((f)->fd)
++#define filedes_close(f) ((f)->read_fn ? 0 : close((f)->fd))
+ 
+ static inline bool
+ filedes_valid(const struct filedes *fd)
+diff -ruN a/include/wimlib/wim.h
+--- a/include/wimlib/wim.h
++++ b/include/wimlib/wim.h
+@@ -222,6 +222,15 @@
+ /* Internal open flags (pass to open_wim_as_WIMStruct(), not wimlib_open_wim())
+  */
+ #define WIMLIB_OPEN_FLAG_FROM_PIPE	0x80000000
++#define WIMLIB_OPEN_FLAG_FROM_READER	0x40000000  /* Kiln */
++
++/* Kiln: what begin_read() gets with WIMLIB_OPEN_FLAG_FROM_READER.  */
++struct wim_reader_source {
++	int (*read_fn)(void *ctx, void *buf, size_t count, uint64_t offset);
++	void *ctx;
++	uint64_t size;
++	const tchar *name;
++};
+ 
+ int
+ open_wim_as_WIMStruct(const void *wim_filename_or_fd, int open_flags,
+diff -ruN a/include/wimlib.h
+--- a/include/wimlib.h
++++ b/include/wimlib.h
+@@ -3758,6 +3758,26 @@
+ 			      void *progctx);
+ 
+ /**
++ * @ingroup G_creating_and_opening_wims
++ *
++ * Kiln addition: open a WIM whose bytes come from a callback instead of a
++ * file, e.g. a file inside an ISO image read through libcdio.  The WIM is
++ * read-only (::WIMLIB_OPEN_FLAG_WRITE_ACCESS is refused).
++ *
++ * @p read_fn must fill @p buf with exactly @p count bytes starting at
++ * @p offset and return 0, or return nonzero on any error (including a read
++ * past @p size).  @p name is only used in messages.
++ */
++typedef int (*wimlib_read_func_t)(void *ctx, void *buf, size_t count,
++				  uint64_t offset);
++
++WIMLIBAPI int
++wimlib_open_wim_from_reader(wimlib_read_func_t read_fn, void *ctx,
++			    uint64_t size, const wimlib_tchar *name,
++			    int open_flags, WIMStruct **wim_ret,
++			    wimlib_progress_func_t progfunc, void *progctx);
++
++/**
+  * @ingroup G_writing_and_overwriting_wims
+  *
+  * Commit a ::WIMStruct to disk, updating its backing file.
+diff -ruN a/src/file_io.c
+--- a/src/file_io.c
++++ b/src/file_io.c
+@@ -47,9 +47,30 @@
+  *	WIMLIB_ERR_READ				(errno set)
+  *	WIMLIB_ERR_UNEXPECTED_END_OF_FILE	(errno set to EINVAL)
+  */
++static int
++reader_read(struct filedes *fd, void *buf, size_t count, off_t offset)
++{
++	if (offset < 0 || (uint64_t)offset > fd->read_size ||
++	    count > fd->read_size - (uint64_t)offset) {
++		errno = EINVAL;
++		return WIMLIB_ERR_UNEXPECTED_END_OF_FILE;
++	}
++	if (count && fd->read_fn(fd->read_ctx, buf, count, (uint64_t)offset)) {
++		errno = EIO;
++		return WIMLIB_ERR_READ;
++	}
++	return 0;
++}
++
+ int
+ full_read(struct filedes *fd, void *buf, size_t count)
+ {
++	if (fd->read_fn) {
++		int ret = reader_read(fd, buf, count, fd->offset);
++		if (ret == 0)
++			fd->offset += count;
++		return ret;
++	}
+ 	while (count) {
+ 		ssize_t ret = read(fd->fd, buf, count);
+ 		if (unlikely(ret <= 0)) {
+@@ -113,6 +134,8 @@
+ int
+ full_pread(struct filedes *fd, void *buf, size_t count, off_t offset)
+ {
++	if (fd->read_fn)
++		return reader_read(fd, buf, count, offset);
+ 	if (fd->is_pipe)
+ 		goto is_pipe;
+ 
+@@ -198,6 +221,10 @@
+ 		errno = ESPIPE;
+ 		return -1;
+ 	}
++	if (fd->read_fn) {
++		fd->offset = offset;
++		return offset;
++	}
+ 	if (fd->offset != offset) {
+ 		if (lseek(fd->fd, offset, SEEK_SET) == -1)
+ 			return -1;
+@@ -208,5 +235,7 @@
+ 
+ bool filedes_is_seekable(struct filedes *fd)
+ {
++	if (fd->read_fn)
++		return true;
+ 	return !fd->is_pipe && lseek(fd->fd, 0, SEEK_CUR) != -1;
+ }
+diff -ruN a/src/header.c
+--- a/src/header.c
++++ b/src/header.c
+@@ -90,6 +90,12 @@
+ 			 * actually reading from a pipe.  */
+ 			if (!in_fd->is_pipe) {
+ 				ret = WIMLIB_ERR_READ;
++				if (in_fd->read_fn) {	/* Kiln */
++					if (in_fd->read_size < WIM_HEADER_DISK_SIZE)
++						goto read_error;
++					in_fd->offset = in_fd->read_size -
++							WIM_HEADER_DISK_SIZE;
++				} else
+ 				if (-1 == lseek(in_fd->fd, -WIM_HEADER_DISK_SIZE, SEEK_END))
+ 					goto read_error;
+ 				ret = full_read(in_fd, &disk_hdr, sizeof(disk_hdr));
+diff -ruN a/src/wim.c
+--- a/src/wim.c
++++ b/src/wim.c
+@@ -644,6 +644,22 @@
+ 		wimfile = NULL;
+ 		filedes_init(&wim->in_fd, *(const int*)wim_filename_or_fd);
+ 		wim->in_fd.is_pipe = 1;
++	} else if (open_flags & WIMLIB_OPEN_FLAG_FROM_READER) {
++		const struct wim_reader_source *src = wim_filename_or_fd;
++
++		filedes_init(&wim->in_fd, FILEDES_READER_FD);
++		wim->in_fd.read_fn = src->read_fn;
++		wim->in_fd.read_ctx = src->ctx;
++		wim->in_fd.read_size = src->size;
++		wim->file_size = src->size;
++		if (open_flags & WIMLIB_OPEN_FLAG_WRITE_ACCESS)
++			return WIMLIB_ERR_WIM_IS_READONLY;
++		/* Never realpath()'d or reopened: used in messages, and
++		 * wimlib_get_xml_data() wants it set.  */
++		wim->filename = tstrdup(src->name);
++		if (!wim->filename)
++			return WIMLIB_ERR_NOMEM;
++		wimfile = wim->filename;
+ 	} else {
+ 		struct stat stbuf;
+ 
+@@ -827,6 +843,26 @@
+ 				     progfunc, progctx);
+ }
+ 
++/* API function documented in wimlib.h (Kiln addition)  */
++WIMLIBAPI int
++wimlib_open_wim_from_reader(wimlib_read_func_t read_fn, void *ctx,
++			    uint64_t size, const tchar *name,
++			    int open_flags, WIMStruct **wim_ret,
++			    wimlib_progress_func_t progfunc, void *progctx)
++{
++	struct wim_reader_source src = { read_fn, ctx, size, name };
++
++	if (open_flags & ~(WIMLIB_OPEN_FLAG_CHECK_INTEGRITY |
++			   WIMLIB_OPEN_FLAG_ERROR_IF_SPLIT))
++		return WIMLIB_ERR_INVALID_PARAM;
++
++	if (!read_fn || !name || !*name || !wim_ret)
++		return WIMLIB_ERR_INVALID_PARAM;
++
++	return open_wim_as_WIMStruct(&src, open_flags | WIMLIB_OPEN_FLAG_FROM_READER,
++				     wim_ret, progfunc, progctx);
++}
++
+ /* API function documented in wimlib.h  */
+ WIMLIBAPI int
+ wimlib_open_wim(const tchar *wimfile, int open_flags, WIMStruct **wim_ret)

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Lets the Kiln GUI start its writer (kiln-helper) as root through pkexec.
+     Every write asks for an administrator password: no "keep" variant, so an
+     unattended session cannot erase a drive without a fresh confirmation. -->
+<policyconfig>
+  <vendor>Kiln</vendor>
+  <vendor_url>https://github.com/TryCoffee/kiln</vendor_url>
+  <icon_name>media-flash</icon_name>
+  <action id="io.github.trycoffee.kiln.write">
+    <description>Write an image to a USB drive or SD card</description>
+    <message>Kiln needs your permission to erase and write the drive</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@KILN_LIBEXEC_DIR@/kiln-helper</annotate>
+  </action>
+</policyconfig>

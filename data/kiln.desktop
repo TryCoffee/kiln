@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kiln
+GenericName=USB Image Writer
+Comment=Write images to USB drives and SD cards; build Windows install sticks
+Exec=kiln-gui %f
+Icon=media-flash
+Terminal=false
+Categories=System;Utility;
+MimeType=application/x-cd-image;application/x-raw-disk-image;
+Keywords=usb;iso;flash;windows;rufus;
