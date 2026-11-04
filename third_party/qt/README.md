@@ -8,6 +8,8 @@ Qt's binary releases do not carry them.
 
 `extra/HPND-sell-variant.txt` is `src/gui/util/LICENSE.XSVG.txt` from the same
 archive: Qt's own text for the XSVG code in Qt GUI (SBOM `Gui_Attribution_xsvg`,
-licence HPND-sell-variant), which `LICENSES/` does not have. The macOS app bundles Qt, and
-`packaging/macos/qt-notices.py` installs from here the texts of Qt and of the
-code built into the Qt files that are bundled, as Qt's SBOM lists them.
+licence HPND-sell-variant), which `LICENSES/` does not have.
+
+The macOS app and the Windows packages bundle Qt; `packaging/qt-notices.py`
+installs from here the texts of Qt and of the code built into the Qt files that
+are bundled, as Qt's SBOM lists them.

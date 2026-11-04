@@ -1,13 +1,22 @@
-# cmake -DKILN_DOWNLOAD_DIR=<dir> -P cmake/fetch-third-party.cmake
+# cmake -DKILN_DOWNLOAD_DIR=<dir> [-DKILN_WITH_SOURCES=ON] -P cmake/fetch-third-party.cmake
 # Downloads every pinned third-party archive into <dir> (kept if already there
 # with the right SHA-256), so the build itself needs no network:
 # cmake -DKILN_DOWNLOAD_DIR=<dir> ...
+# KILN_WITH_SOURCES also fetches the source-only archives a release carries.
 if(NOT KILN_DOWNLOAD_DIR)
     message(FATAL_ERROR "usage: cmake -DKILN_DOWNLOAD_DIR=<dir> -P ${CMAKE_CURRENT_LIST_FILE}")
 endif()
 include(${CMAKE_CURRENT_LIST_DIR}/third-party.cmake)
-foreach(dep ${KILN_THIRD_PARTY})
-    get_filename_component(name ${KILN_${dep}_URL} NAME)
+set(deps ${KILN_THIRD_PARTY})
+if(KILN_WITH_SOURCES)
+    list(APPEND deps ${KILN_SOURCES_ONLY})
+endif()
+foreach(dep ${deps})
+    if(DEFINED KILN_${dep}_NAME)
+        set(name ${KILN_${dep}_NAME})
+    else()
+        get_filename_component(name ${KILN_${dep}_URL} NAME)
+    endif()
     set(file ${KILN_DOWNLOAD_DIR}/${name})
     if(EXISTS ${file})
         file(SHA256 ${file} got)

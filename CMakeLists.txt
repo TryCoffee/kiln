@@ -27,7 +27,9 @@ endif()
 set(KILN_CONFIGURE <SOURCE_DIR>/configure)
 set(KILN_IN_SOURCE FALSE)
 if(KILN_WINDOWS)
-    set(KILN_CONFIGURE ${KILN_SH} ./configure)
+    # CMake's own archiver too, so the configure scripts never mix in another
+    # toolchain's binutils that happen to be on PATH.
+    set(KILN_CONFIGURE ${KILN_SH} ./configure AR=${CMAKE_AR} RANLIB=${CMAKE_RANLIB})
     set(KILN_IN_SOURCE TRUE)
 endif()
 
@@ -49,6 +51,38 @@ ProcessorCount(NPROC)
 # platform: the version Kiln's multi-extent install.wim reading was proven on
 # (Debian 13 and MSYS2 ship older ones). KILN_SYSTEM_LIBCDIO=ON uses the
 # system's instead (Linux).
+# iconv (libcdio and hivex convert names with it): glibc and macOS have it; on
+# Windows, GNU libiconv built here, static (LGPL-2.1+).
+add_library(kiln_iconv INTERFACE)
+set(KILN_ICONV_FLAGS)
+if(KILN_MACOS)
+    target_link_libraries(kiln_iconv INTERFACE iconv)
+elseif(KILN_WINDOWS)
+    set(ICONV_PREFIX ${CMAKE_BINARY_DIR}/iconv)
+    ExternalProject_Add(iconv_ext
+        URL ${KILN_ICONV_URL}
+        URL_HASH SHA256=${KILN_ICONV_SHA256}
+        DOWNLOAD_DIR ${KILN_DOWNLOAD_DIR}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        BUILD_IN_SOURCE ${KILN_IN_SOURCE}
+        CONFIGURE_COMMAND ${KILN_CONFIGURE} --prefix=<INSTALL_DIR> --disable-shared --enable-static
+                          --disable-nls --disable-dependency-tracking CC=${CMAKE_C_COMPILER}
+        # the library and its header only (the top level would also build iconv.exe, man pages...)
+        BUILD_COMMAND make lib/localcharset.h && make -j${NPROC} -C libcharset && make -j${NPROC} -C lib
+        INSTALL_COMMAND make -C libcharset install && make -C lib install
+                        && ${CMAKE_COMMAND} -E copy include/iconv.h.inst <INSTALL_DIR>/include/iconv.h
+        INSTALL_DIR ${ICONV_PREFIX}
+        BUILD_BYPRODUCTS ${ICONV_PREFIX}/lib/libiconv.a ${ICONV_PREFIX}/lib/libcharset.a
+    )
+    file(MAKE_DIRECTORY ${ICONV_PREFIX}/include)
+    target_include_directories(kiln_iconv SYSTEM INTERFACE ${ICONV_PREFIX}/include)
+    target_link_libraries(kiln_iconv INTERFACE ${ICONV_PREFIX}/lib/libiconv.a ${ICONV_PREFIX}/lib/libcharset.a)
+    add_dependencies(kiln_iconv iconv_ext)
+    # what libcdio's and hivex's configure scripts need to find it
+    set(KILN_ICONV_FLAGS --with-libiconv-prefix=${ICONV_PREFIX}
+        "CPPFLAGS=-I${ICONV_PREFIX}/include" "LDFLAGS=-L${ICONV_PREFIX}/lib")
+endif()
+
 option(KILN_SYSTEM_LIBCDIO "Use the system's libcdio (Linux)" OFF)
 if(KILN_LINUX AND KILN_SYSTEM_LIBCDIO)
     find_package(PkgConfig REQUIRED)
@@ -65,7 +99,7 @@ else()
         CONFIGURE_COMMAND ${KILN_CONFIGURE} --prefix=<INSTALL_DIR> --disable-shared --enable-static
                           --disable-cxx --disable-example-progs --without-cd-drive --without-cd-info
                           --without-cdda-player --without-cd-read --without-iso-info --without-iso-read
-                          --disable-dependency-tracking CC=${CMAKE_C_COMPILER}
+                          --disable-dependency-tracking CC=${CMAKE_C_COMPILER} ${KILN_ICONV_FLAGS}
         BUILD_COMMAND make -j${NPROC} -C lib
         INSTALL_COMMAND make -C lib install && make -C include install
         INSTALL_DIR ${CDIO_PREFIX}
@@ -76,11 +110,13 @@ else()
     target_include_directories(cdio SYSTEM INTERFACE ${CDIO_PREFIX}/include)
     target_link_libraries(cdio INTERFACE ${CDIO_PREFIX}/lib/libudf.a ${CDIO_PREFIX}/lib/libiso9660.a
                           ${CDIO_PREFIX}/lib/libcdio.a)
+    target_link_libraries(cdio INTERFACE kiln_iconv)
     if(KILN_MACOS)
-        target_link_libraries(cdio INTERFACE iconv "-framework IOKit" "-framework CoreFoundation")
+        target_link_libraries(cdio INTERFACE "-framework IOKit" "-framework CoreFoundation")
     elseif(KILN_WINDOWS)
-        target_link_libraries(cdio INTERFACE iconv winmm)
-    endif()  # Linux: iconv is part of glibc
+        target_link_libraries(cdio INTERFACE winmm)
+        add_dependencies(cdio_ext iconv_ext)
+    endif()
     add_dependencies(cdio cdio_ext)
 endif()
 
@@ -130,7 +166,7 @@ ExternalProject_Add(hivex_ext
     BUILD_IN_SOURCE ${KILN_IN_SOURCE}
     CONFIGURE_COMMAND ${KILN_CONFIGURE} --prefix=<INSTALL_DIR> --disable-shared --enable-static
                       --disable-ocaml --disable-perl --disable-python --disable-ruby --disable-nls
-                      --disable-dependency-tracking CC=${CMAKE_C_COMPILER}
+                      --disable-dependency-tracking CC=${CMAKE_C_COMPILER} ${KILN_ICONV_FLAGS}
                       # only the library is built: its man page and HTML (pod2man, pod2html) never are
                       POD2MAN=false POD2TEXT=false
     BUILD_COMMAND make -j${NPROC} -C gnulib/lib && make -j${NPROC} -C lib libhivex.la
@@ -144,8 +180,9 @@ set_target_properties(hivex PROPERTIES
     IMPORTED_LOCATION ${HIVEX_PREFIX}/lib/libhivex.a
     INTERFACE_INCLUDE_DIRECTORIES ${HIVEX_PREFIX}/include)
 add_dependencies(hivex hivex_ext)
-if(KILN_MACOS OR KILN_WINDOWS)
-    set_target_properties(hivex PROPERTIES INTERFACE_LINK_LIBRARIES iconv)  # glibc has it built in
+set_target_properties(hivex PROPERTIES INTERFACE_LINK_LIBRARIES kiln_iconv)
+if(KILN_WINDOWS)
+    add_dependencies(hivex_ext iconv_ext)
 endif()
 
 # XZ Embedded (vendored, 0BSD): unpacks Ventoy's core.img.xz and ventoy.disk.img.xz.
@@ -423,6 +460,10 @@ install(FILES ${SOURCE_DIR}/LICENSE DESTINATION ${KILN_LICENSE_DIR}/hivex)
 if(TARGET cdio_ext)
     ExternalProject_Get_Property(cdio_ext SOURCE_DIR)
     install(FILES ${SOURCE_DIR}/COPYING DESTINATION ${KILN_LICENSE_DIR}/libcdio)
+endif()
+if(TARGET iconv_ext)
+    ExternalProject_Get_Property(iconv_ext SOURCE_DIR)
+    install(FILES ${SOURCE_DIR}/COPYING.LIB DESTINATION ${KILN_LICENSE_DIR}/libiconv)
 endif()
 option(KILN_DEBIAN_COPYRIGHT "Also write every licence into one Debian copyright file" OFF)
 if(KILN_DEBIAN_COPYRIGHT)  # last: it reads the licence texts installed above

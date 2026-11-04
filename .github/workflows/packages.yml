@@ -1,8 +1,9 @@
 # Builds every package with the same scripts as a local build: Linux
 # (packaging/linux/build.sh, offline in a container; smoke-test.sh installs each
-# on fresh containers) and macOS (packaging/macos/make-dmg.sh with Qt's official
-# build). On a v* tag, attaches the packages and the source archives to a draft
-# release.
+# on fresh containers), macOS (packaging/macos/make-dmg.sh with Qt's official
+# build) and Windows (packaging/windows/make-installer.sh with Qt's official
+# llvm-mingw build). On a v* tag, attaches the packages and the source archives
+# to a draft release.
 name: Packages
 
 on:
@@ -77,22 +78,59 @@ jobs:
             dist/Kiln-*.dmg
             dist/gui-macos.png
 
+  windows:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            make patch
+            mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-python
+      - name: Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Qt and llvm-mingw (pinned)
+        run: packaging/windows/fetch-toolchain.sh "$(cygpath -u "$RUNNER_TEMP")/toolchain"
+      - name: Build, check and package
+        run: |
+          t=$(cygpath -u "$RUNNER_TEMP")/toolchain
+          packaging/windows/make-installer.sh "$t/qt" "$t/llvm-mingw" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiln-windows
+          path: |
+            dist/Kiln-*-x64-setup.exe
+            dist/Kiln-*-x64.zip
+            dist/gui-windows.png
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [package, macos]
+    needs: [package, macos, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: Source archives (incl. Ventoy's source, not needed by the builds)
+        run: cmake -DKILN_DOWNLOAD_DIR="$PWD/artifacts/kiln-sources/sources" -DKILN_WITH_SOURCES=ON
+                   -P src/cmake/fetch-third-party.cmake
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          files=$(find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*.dmg' \
+          files=$(find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*.dmg' -o -name 'Kiln-*-x64*' \
                   -o -name 'kiln-*.tar.gz' -o -path '*/sources/*' \) | sort)
           for f in $files; do (cd "$(dirname "$f")" && sha256sum "$(basename "$f")"); done > SHA256SUMS
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \

@@ -1,2 +1,30 @@
-// Windows resources of every Kiln executable: the manifest (RT_MANIFEST 24, id 1).
+// Windows resources of every Kiln executable: the manifest (RT_MANIFEST 24, id 1),
+// the icon (the first icon group is the one Explorer shows) and the version.
+#include <winver.h>
+
 1 24 "@CMAKE_SOURCE_DIR@/data/kiln.manifest"
+1 ICON "@CMAKE_SOURCE_DIR@/data/icons/kiln.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Kiln"
+            VALUE "FileDescription",  "Kiln USB flasher"
+            VALUE "FileVersion",      "@PROJECT_VERSION@"
+            VALUE "LegalCopyright",   "Free software under the GNU GPL v3 or later"
+            VALUE "ProductName",      "Kiln"
+            VALUE "ProductVersion",   "@PROJECT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <string>
 
@@ -24,10 +25,9 @@ inline void check(bool ok, const std::string& what) {
 // differently, and only exfatprogs prints the cluster size (with -v).
 inline uint64_t exfat_cluster_bytes(const std::filesystem::path& volume, uint64_t offset = 0) {
     unsigned char bs[512] = {};
-    FILE* f = std::fopen(volume.c_str(), "rb");
-    if (!f) return 0;
-    const bool got = std::fseek(f, static_cast<long>(offset), SEEK_SET) == 0 && std::fread(bs, 1, sizeof bs, f) == sizeof bs;
-    std::fclose(f);
+    std::ifstream f(volume, std::ios::binary);  // a path, not c_str(): wchar_t on Windows
+    f.seekg(static_cast<std::streamoff>(offset));
+    const bool got = static_cast<bool>(f.read(reinterpret_cast<char*>(bs), sizeof bs));
     if (!got || std::memcmp(bs + 3, "EXFAT   ", 8) != 0 || bs[0x6C] > 12 || bs[0x6D] > 25) return 0;
     return uint64_t{1} << (bs[0x6C] + bs[0x6D]);
 }

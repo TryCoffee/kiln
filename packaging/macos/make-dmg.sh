@@ -58,7 +58,7 @@ find "$C" -type f | while read -r f; do
     fi
 done
 
-python3 -I "$root/packaging/macos/qt-notices.py" "$sbom" "$C" "$root/third_party/qt/LICENSES:$root/third_party/qt/extra" \
+python3 -I "$root/packaging/qt-notices.py" "$sbom" "$C" "$root/third_party/qt/LICENSES:$root/third_party/qt/extra" \
         "$C/Resources/licenses/qt"
 
 # Sign ad hoc, inside out.

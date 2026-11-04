@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Qt's notices for the Qt files bundled into Kiln.app.
+"""Qt's notices for the Qt files bundled with Kiln (macOS app, Windows folder).
 
     qt-notices.py SBOM CONTENTS LICENSES OUT
 
 SBOM      Qt's SPDX SBOM (<qt>/sbom/qtbase-<version>.spdx.json)
-CONTENTS  the app's Contents/ folder, after macdeployqt
-LICENSES  folders of licence texts named <SPDX id>.txt, separated by ':'
-          (third_party/qt/LICENSES:third_party/qt/extra)
+CONTENTS  macOS: the app's Contents/ folder, after macdeployqt;
+          Windows: the folder with kiln-gui.exe, after windeployqt
+LICENSES  folders of licence texts named <SPDX id>.txt, separated like PATH
+          (':' on macOS, ';' on Windows): third_party/qt/LICENSES and third_party/qt/extra
 OUT       where NOTICES.md and the licence texts go (Contents/Resources/licenses/qt)
 
 Starts from the Qt files actually in the bundle (Frameworks/Qt*.framework,
@@ -28,8 +29,19 @@ OPERATORS = {"AND", "OR", "WITH"}
 
 
 def bundled_qt_files(contents):
-    """Paths as the SBOM writes them ("./lib/QtCore.framework/Versions/A/QtCore")."""
+    """Paths as the SBOM writes them ("./lib/QtCore.framework/Versions/A/QtCore",
+    "./bin/Qt6Core.dll"), mapped to where they are in the bundle."""
     found = {}
+    if not os.path.isdir(os.path.join(contents, "Frameworks")):  # Windows: one folder
+        for name in sorted(os.listdir(contents)):
+            path = os.path.join(contents, name)
+            if name.startswith("Qt6") and name.endswith(".dll"):
+                found[f"./bin/{name}"] = name
+            elif os.path.isdir(path):
+                for f in sorted(os.listdir(path)):
+                    if f.endswith(".dll"):
+                        found[f"./plugins/{name}/{f}"] = f"{name}/{f}"
+        return found
     fw = os.path.join(contents, "Frameworks")
     for name in sorted(os.listdir(fw)) if os.path.isdir(fw) else []:
         if name.startswith("Qt") and name.endswith(".framework"):
@@ -92,7 +104,7 @@ def main(sbom_path, contents, licenses, out):
 
     os.makedirs(out, exist_ok=True)
     have = {}
-    for folder in licenses.split(":"):
+    for folder in licenses.split(os.pathsep):
         for f in os.listdir(folder):
             if f.endswith(".txt"):
                 have.setdefault(f[:-4], os.path.join(folder, f))
@@ -107,19 +119,30 @@ def main(sbom_path, contents, licenses, out):
     if not m:
         sys.exit(f"no Qt version in the SBOM's file name: {sbom_path}")
     version = m.group(1)
+    macos = os.path.isdir(os.path.join(contents, "Frameworks"))
     with open(os.path.join(out, "NOTICES.md"), "w") as f:
-        f.write(f"# Qt {version}\n\n"
-                "Kiln.app contains these files of the Qt toolkit, from Qt's official build for\n"
-                "macOS, changed only as macdeployqt and the packaging do: their library paths\n"
-                "point into the app, only their arm64 code is kept (lipo -thin), and they are\n"
-                f"signed with the app. Kiln uses Qt under the {QT_CHOICE}.\n\n")
+        f.write(f"# Qt {version}\n\n")
+        if macos:
+            f.write("Kiln.app contains these files of the Qt toolkit, from Qt's official build for\n"
+                    "macOS, changed only as macdeployqt and the packaging do: their library paths\n"
+                    "point into the app, only their arm64 code is kept (lipo -thin), and they are\n"
+                    f"signed with the app. Kiln uses Qt under the {QT_CHOICE}.\n\n")
+        else:
+            f.write("Kiln for Windows contains these files of the Qt toolkit, unmodified, from Qt's\n"
+                    f"official build for Windows (llvm-mingw). Kiln uses Qt under the {QT_CHOICE}.\n\n")
         for p in bundled.values():
             f.write(f"- `{p}`\n")
         f.write("\nThe Qt source code for this version is at\n"
                 f"https://download.qt.io/official_releases/qt/{'.'.join(version.split('.')[:2])}/{version}/submodules/\n"
-                "(qtbase-everywhere-src-" + version + ".tar.xz). The Qt frameworks and plug-ins\n"
-                "in Contents/Frameworks and Contents/PlugIns can be replaced with your own build\n"
-                "of the same Qt version; re-sign the app afterwards (codesign --force --deep -s - Kiln.app).\n\n"
+                "(qtbase-everywhere-src-" + version + ".tar.xz). ")
+        if macos:
+            f.write("The Qt frameworks and plug-ins in Contents/Frameworks\n"
+                    "and Contents/PlugIns can be replaced with your own build of the same Qt version;\n"
+                    "re-sign the app afterwards (codesign --force --deep -s - Kiln.app).\n\n")
+        else:
+            f.write("The Qt DLLs and plug-in folders next to kiln-gui.exe can be\n"
+                    "replaced with your own build of the same Qt version.\n\n")
+        f.write(
                 "What those files contain, from Qt's SBOM, with each part's licence (texts in\n"
                 "this folder):\n\n")
         for name, ver, used, copyright in entries:

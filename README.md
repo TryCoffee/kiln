@@ -44,7 +44,7 @@ Licensed under the GNU GPL v3 or later (see `LICENSE`).
 | Raw write + verify | yes | yes | yes |
 | Windows install sticks | yes | yes | yes |
 | Ventoy disks | yes | yes | yes |
-| Ready-made packages | Arch, Debian/Ubuntu, Fedora | not yet | Apple silicon, macOS 14.4+ |
+| Ready-made packages | Arch, Debian/Ubuntu, Fedora | installer and zip, x64 | Apple silicon, macOS 14.4+ |
 
 ## Installing on Linux
 
@@ -77,7 +77,24 @@ The command line is inside the app:
     /Applications/Kiln.app/Contents/Helpers/kiln list
     sudo ln -s /Applications/Kiln.app/Contents/Helpers/kiln /usr/local/bin/kiln   # optional
 
-Windows: build from source (below).
+
+## Installing on Windows
+
+From the [release](https://github.com/TryCoffee/kiln/releases), for 64-bit
+Windows 10 (1903) or newer:
+
+- `Kiln-VERSION-x64-setup.exe` installs Kiln into Program Files with a Start
+  menu entry and an uninstaller;
+- `Kiln-VERSION-x64.zip` is the same files to unpack anywhere and run from there.
+
+Kiln is not code-signed, so SmartScreen warns before the first start: choose
+"More info", then "Run anyway". Writing a drive asks for administrator rights
+(UAC) each time.
+
+The command line is `kiln.exe` in the same folder; it needs a terminal opened
+with "Run as administrator" to write a drive:
+
+    "C:\Program Files\Kiln\kiln.exe" list
 
 ## What Kiln will never write to
 
@@ -199,13 +216,15 @@ Tested:
   ending signed in to the local account.
 - **Windows:** Windows 11 sticks, raw writes and Ventoy disks made on Windows
   onto a virtual USB stick, checked from Linux and booted in QEMU.
-- **macOS (Apple silicon):** raw writes on a file-backed disk; Windows 11
-  sticks and Ventoy disks made into image files, checked from Linux and booted
-  in QEMU.
+- **macOS (Apple silicon):** on a real USB stick, with the released app's
+  command line: an Arch Linux ISO written raw (the stick read back equal to
+  the ISO), a Windows 11 stick with every setup tweak, and a Ventoy disk, each
+  checked with macOS's own tools. Windows 11 sticks and Ventoy disks made into
+  image files were also checked from Linux and booted in QEMU.
 
 Not tested yet:
 
-- a physical stick on Windows or macOS;
+- a physical stick on Windows;
 - the GUI's admin prompt on Windows (UAC) and macOS (`authopen`);
 - a Ventoy disk on a machine with Secure Boot enforced;
 - Intel Macs.
@@ -225,6 +244,8 @@ fetch them first and point the build at them:
     cmake -DKILN_DOWNLOAD_DIR=deps -P cmake/fetch-third-party.cmake
     cmake -S . -B build -G Ninja -DKILN_DOWNLOAD_DIR=deps
 
+Then (or straight away, online):
+
     cmake -S . -B build -G Ninja
     cmake --build build
     (cd build && ctest --output-on-failure)
@@ -236,8 +257,12 @@ distribution: `packaging/linux/build.sh arch|debian|fedora` (needs Docker).
 The tests use sfdisk, fsck.fat, mtools, fsck.exfat and xz as independent
 checkers; a missing tool marks a test skipped, not passed.
 
-- **Windows:** MSYS2's UCRT64 toolchain (GCC, CMake, Ninja, `patch`, Qt 6).
-  libcdio, wimlib and hivex are built from source. Windows 10 1903 or newer.
+- **Windows:** Qt's official build for llvm-mingw and the llvm-mingw it was
+  made with (`packaging/windows/fetch-toolchain.sh` downloads both, pinned),
+  plus MSYS2 for the tools (CMake, Ninja, `make`, `patch`, Python). GNU
+  libiconv is built from source there too. `packaging/windows/make-installer.sh`
+  builds the installer and the zip the way the releases are made (needs Inno
+  Setup 6). Windows 10 1903 or newer.
 - **macOS:** Xcode command line tools, CMake, Ninja, Qt 6
   (`-DCMAKE_PREFIX_PATH=<qt>`). `packaging/macos/make-dmg.sh <qt>` builds the
   app and the disk image the way the releases are made (with Qt's official
