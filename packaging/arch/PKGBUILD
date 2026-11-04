@@ -1,0 +1,40 @@
+# Maintainer: TryCoffee <108859537+TryCoffee@users.noreply.github.com>
+pkgname=kiln
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='USB flasher: verified image writes, Windows install sticks, Ventoy disks'
+arch=(x86_64)
+url='https://github.com/TryCoffee/kiln'
+license=('GPL-3.0-or-later')
+depends=(gcc-libs glibc qt6-base polkit hicolor-icon-theme)
+makedepends=(cmake ninja)
+checkdepends=(util-linux dosfstools mtools exfatprogs xz libxml2)
+# The third-party archives must match cmake/third-party.cmake (the build checks them again).
+source=("kiln-$pkgver.tar.gz::https://github.com/TryCoffee/kiln/archive/refs/tags/v$pkgver.tar.gz"
+        https://github.com/libcdio/libcdio-C/releases/download/2.4.0/libcdio-2.4.0.tar.gz
+        https://wimlib.net/downloads/wimlib-1.14.5.tar.gz
+        https://download.libguestfs.org/hivex/hivex-1.3.24.tar.gz
+        https://github.com/ventoy/Ventoy/releases/download/v1.1.18/ventoy-1.1.18-linux.tar.gz)
+noextract=(libcdio-2.4.0.tar.gz wimlib-1.14.5.tar.gz hivex-1.3.24.tar.gz ventoy-1.1.18-linux.tar.gz)
+sha256sums=('SKIP'  # Kiln's own archive: filled in when v$pkgver is tagged
+            'bf7cde63762bb12db7755c395c441e49406fde7e1d9f9a9be7e3b940b1f405d7'
+            '84221a3abd5b91228f15f8e6065c335a336237b5738197b75bf419eea561a194'
+            'a52fa45cecc9a78adb2d28605d68261e4f1fd4514a778a5473013d2ccc8a193c'
+            'd86ff9de63d94c8b8f1f6b14d23c55af4b88e8207bf2893890892a6a97b1ad54')
+
+build() {
+  cmake -S "kiln-$pkgver" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBEXECDIR=lib \
+    -DKILN_DOWNLOAD_DIR="$srcdir"
+  cmake --build build
+}
+
+check() {
+  ctest --test-dir build --output-on-failure
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

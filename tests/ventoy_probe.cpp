@@ -31,14 +31,6 @@ std::string run(const std::string& cmd) {
     return out;
 }
 
-// The line of `out` that contains `key`, or empty.
-std::string line_with(const std::string& out, const std::string& key) {
-    const size_t at = out.find(key);
-    if (at == std::string::npos) return {};
-    const size_t start = out.rfind('\n', at) == std::string::npos ? 0 : out.rfind('\n', at) + 1;
-    return out.substr(start, out.find('\n', at) - start);
-}
-
 bool have(const char* tool) { return std::system((std::string("command -v ") + tool + " >/dev/null 2>&1").c_str()) == 0; }
 
 Bytes read_at(const fs::path& f, uint64_t at, size_t n) {
@@ -171,8 +163,8 @@ int main() {
         check(read_at(disk, l.part2_first * 512, 32 * kMiB) == efi, "partition 2 = Ventoy's EFI image, byte for byte");
         const fs::path p1 = extract(disk, l.part1_first, l.part1_last, tmp.path() / "mbr-p1.img");
         const std::string fx = run("LC_ALL=C fsck.exfat -n " + p1.string());
-        check(fx.find("EXIT-FAILED") == std::string::npos && line_with(fx, "Cluster size").ends_with(" 32 KB"),
-              "fsck.exfat: partition 1 clean, 32 KiB clusters (drive up to 32 GiB)");
+        check(fx.find("EXIT-FAILED") == std::string::npos, "fsck.exfat: partition 1 clean");
+        check(probe::exfat_cluster_bytes(p1) == 32 * 1024, "partition 1: 32 KiB clusters (drive up to 32 GiB)");
         check(run("exfatlabel " + p1.string()).find("Ventoy") != std::string::npos, "exfatlabel: Ventoy");
         const fs::path p2 = extract(disk, l.part2_first, l.part2_last, tmp.path() / "mbr-p2.img");
         check(run("LC_ALL=C fsck.fat -n " + p2.string()).find("EXIT-FAILED") == std::string::npos, "fsck.fat: VTOYEFI clean");
@@ -216,8 +208,8 @@ int main() {
               "sectors 34-2047: core.img with its next-sector pointer at 35");
         const fs::path p1 = extract(disk, l.part1_first, l.part1_last, tmp.path() / "gpt-p1.img");
         const std::string fx = run("LC_ALL=C fsck.exfat -n " + p1.string());
-        check(fx.find("EXIT-FAILED") == std::string::npos && line_with(fx, "Cluster size").ends_with(" 128 KB"),
-              "fsck.exfat: partition 1 clean, 128 KiB clusters (drive over 32 GiB)");
+        check(fx.find("EXIT-FAILED") == std::string::npos, "fsck.exfat: partition 1 clean");
+        check(probe::exfat_cluster_bytes(p1) == 128 * 1024, "partition 1: 128 KiB clusters (drive over 32 GiB)");
         check(run("LC_ALL=C.UTF-8 exfatlabel " + p1.string()).find("Mój dysk") != std::string::npos, "exfatlabel: Mój dysk");
         const fs::path p2 = extract(disk, l.part2_first, l.part2_last, tmp.path() / "gpt-p2.img");
         check(run("LC_ALL=C fsck.fat -n " + p2.string()).find("EXIT-FAILED") == std::string::npos, "fsck.fat: VTOYEFI clean");

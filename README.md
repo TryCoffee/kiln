@@ -44,9 +44,24 @@ Licensed under the GNU GPL v3 or later (see `LICENSE`).
 | Raw write + verify | yes | yes | yes |
 | Windows install sticks | yes | yes | yes |
 | Ventoy disks | yes | yes | yes |
-| Ready-made packages | not yet | not yet | not yet |
+| Ready-made packages | Arch, Debian/Ubuntu, Fedora | not yet | not yet |
 
-There are no packages yet: build from source (below).
+## Installing on Linux
+
+Packages for x86_64 are attached to each
+[release](https://github.com/TryCoffee/kiln/releases). Each one installs
+`kiln`, `kiln-gui`, the helper and its polkit rule, and pulls in Qt 6 and
+pkexec through your package manager.
+
+| Distribution | Package | Install |
+|---|---|---|
+| Arch Linux, CachyOS | `kiln-VERSION-1-x86_64.pkg.tar.zst` | `sudo pacman -U kiln-*.pkg.tar.zst` |
+| Debian 13, Ubuntu 26.04 | `kiln_VERSION_amd64.deb` | `sudo apt install ./kiln_*_amd64.deb` |
+| Fedora 44 | `kiln-VERSION-1.x86_64.rpm` | `sudo dnf install ./kiln-*.x86_64.rpm` |
+
+`SHA256SUMS` in the release lists every file's checksum. The Arch package is
+built from `packaging/arch/PKGBUILD`, which also works with `makepkg` on its own.
+Other platforms: build from source (below).
 
 ## What Kiln will never write to
 
@@ -184,16 +199,23 @@ Bug reports are welcome in the issue tracker.
 ## Building
 
 Needs CMake 3.25+, a C/C++20 compiler whose C side knows C23's `#embed`
-(GCC 15+, Clang 19+), libcdio (with libudf), and Qt 6.4+ Widgets for the GUI
-(`-DKILN_GUI=OFF` builds without it). The first configure needs network
-access: CMake downloads wimlib 1.14.5, hivex 1.3.24 and Ventoy 1.1.18's Linux
-release, all pinned by SHA-256 (`-DKILN_VENTOY_ARCHIVE=<file>` for offline
-builds).
+(GCC 15+, Clang 19+; on Debian 13 use `-DCMAKE_C_COMPILER=clang-19`), `make`
+and `patch`, and Qt 6.4+ Widgets for the GUI (`-DKILN_GUI=OFF` builds without
+it). CMake builds libcdio 2.4.0, wimlib 1.14.5 and hivex 1.3.24 from source
+and takes three files from Ventoy 1.1.18's release, all pinned by SHA-256
+(`cmake/third-party.cmake`). The first build downloads them; to build offline,
+fetch them first and point the build at them:
+
+    cmake -DKILN_DOWNLOAD_DIR=deps -P cmake/fetch-third-party.cmake
+    cmake -S . -B build -G Ninja -DKILN_DOWNLOAD_DIR=deps
 
     cmake -S . -B build -G Ninja
     cmake --build build
     (cd build && ctest --output-on-failure)
     sudo cmake --install build    # Linux: also installs the polkit policy
+
+The Linux packages are built the same way, offline, in a container per
+distribution: `packaging/linux/build.sh arch|debian|fedora` (needs Docker).
 
 The tests use sfdisk, fsck.fat, mtools, fsck.exfat and xz as independent
 checkers; a missing tool marks a test skipped, not passed.
@@ -215,6 +237,8 @@ checkers; a missing tool marks a test skipped, not passed.
 - wimlib 1.14.5 (GPL-3.0+ / LGPL-2.1+), built from source with a patch
   (`third_party/wimlib/`).
 - hivex 1.3.24 (LGPL-2.1+), the library only, built from source.
-- libcdio (GPL-3.0+).
+- libcdio 2.4.0 (GPL-3.0+), built from source.
+- Every package carries these components' licence texts and
+  `THIRD-PARTY-NOTICES.md`, which also says where their source is.
 - Rufus (GPL-3.0+) is the reference for the Windows stick layout and setup
   tweaks; code ported from it (`src/unattend.cpp`) carries its attribution.

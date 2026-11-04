@@ -1,0 +1,12 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file>kiln-16.png</file>
+    <file>kiln-24.png</file>
+    <file>kiln-32.png</file>
+    <file>kiln-48.png</file>
+    <file>kiln-64.png</file>
+    <file>kiln-128.png</file>
+    <file>kiln-256.png</file>
+    <file>kiln-512.png</file>
+  </qresource>
+</RCC>

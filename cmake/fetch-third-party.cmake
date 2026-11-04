@@ -1,0 +1,25 @@
+# cmake -DKILN_DOWNLOAD_DIR=<dir> -P cmake/fetch-third-party.cmake
+# Downloads every pinned third-party archive into <dir> (kept if already there
+# with the right SHA-256), so the build itself needs no network:
+# cmake -DKILN_DOWNLOAD_DIR=<dir> ...
+if(NOT KILN_DOWNLOAD_DIR)
+    message(FATAL_ERROR "usage: cmake -DKILN_DOWNLOAD_DIR=<dir> -P ${CMAKE_CURRENT_LIST_FILE}")
+endif()
+include(${CMAKE_CURRENT_LIST_DIR}/third-party.cmake)
+foreach(dep ${KILN_THIRD_PARTY})
+    get_filename_component(name ${KILN_${dep}_URL} NAME)
+    set(file ${KILN_DOWNLOAD_DIR}/${name})
+    if(EXISTS ${file})
+        file(SHA256 ${file} got)
+        if(got STREQUAL KILN_${dep}_SHA256)
+            message(STATUS "have ${name}")
+            continue()
+        endif()
+    endif()
+    message(STATUS "downloading ${name}")
+    file(DOWNLOAD ${KILN_${dep}_URL} ${file} EXPECTED_HASH SHA256=${KILN_${dep}_SHA256} TLS_VERIFY ON STATUS st)
+    list(GET st 0 rc)
+    if(NOT rc EQUAL 0)
+        message(FATAL_ERROR "${name}: ${st}")
+    endif()
+endforeach()

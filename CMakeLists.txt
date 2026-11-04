@@ -33,23 +33,33 @@ endif()
 
 find_package(Threads REQUIRED)
 include(ExternalProject)
+include(GNUInstallDirs)
+include(cmake/third-party.cmake)
+
+# Where the pinned third-party tarballs (libcdio, wimlib, hivex, Ventoy) are
+# looked for and downloaded to. A package build puts them here beforehand and
+# builds offline: a file whose SHA-256 matches is never downloaded again.
+set(KILN_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/downloads" CACHE PATH "third-party tarballs")
 include(ProcessorCount)
 ProcessorCount(NPROC)
 
 # --- third party ----------------------------------------------------------
 
-# libcdio (GPL-3.0+): UDF reading. Linux: the system's; macOS and Windows: 2.4.0
-# built here, library only (the version Kiln's multi-extent install.wim reading
-# was proven on; MSYS2 ships 2.3.0).
-if(KILN_LINUX)
+# libcdio (GPL-3.0+): UDF reading. 2.4.0 built here, library only, on every
+# platform: the version Kiln's multi-extent install.wim reading was proven on
+# (Debian 13 and MSYS2 ship older ones). KILN_SYSTEM_LIBCDIO=ON uses the
+# system's instead (Linux).
+option(KILN_SYSTEM_LIBCDIO "Use the system's libcdio (Linux)" OFF)
+if(KILN_LINUX AND KILN_SYSTEM_LIBCDIO)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(CDIO REQUIRED IMPORTED_TARGET libudf libcdio)
     add_library(cdio ALIAS PkgConfig::CDIO)
 else()
     set(CDIO_PREFIX ${CMAKE_BINARY_DIR}/cdio)
     ExternalProject_Add(cdio_ext
-        URL https://github.com/libcdio/libcdio-C/releases/download/2.4.0/libcdio-2.4.0.tar.gz
-        URL_HASH SHA256=bf7cde63762bb12db7755c395c441e49406fde7e1d9f9a9be7e3b940b1f405d7
+        URL ${KILN_CDIO_URL}
+        URL_HASH SHA256=${KILN_CDIO_SHA256}
+        DOWNLOAD_DIR ${KILN_DOWNLOAD_DIR}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         BUILD_IN_SOURCE ${KILN_IN_SOURCE}
         CONFIGURE_COMMAND ${KILN_CONFIGURE} --prefix=<INSTALL_DIR> --disable-shared --enable-static
@@ -65,12 +75,12 @@ else()
     add_library(cdio INTERFACE)
     target_include_directories(cdio SYSTEM INTERFACE ${CDIO_PREFIX}/include)
     target_link_libraries(cdio INTERFACE ${CDIO_PREFIX}/lib/libudf.a ${CDIO_PREFIX}/lib/libiso9660.a
-                          ${CDIO_PREFIX}/lib/libcdio.a iconv)
+                          ${CDIO_PREFIX}/lib/libcdio.a)
     if(KILN_MACOS)
-        target_link_libraries(cdio INTERFACE "-framework IOKit" "-framework CoreFoundation")
-    else()
-        target_link_libraries(cdio INTERFACE winmm)
-    endif()
+        target_link_libraries(cdio INTERFACE iconv "-framework IOKit" "-framework CoreFoundation")
+    elseif(KILN_WINDOWS)
+        target_link_libraries(cdio INTERFACE iconv winmm)
+    endif()  # Linux: iconv is part of glibc
     add_dependencies(cdio cdio_ext)
 endif()
 
@@ -82,8 +92,9 @@ target_compile_options(fatfs PRIVATE -w)  # upstream code, kept unmodified
 # wimlib 1.14.5 + Kiln's read-callback patch, static, no FUSE/NTFS-3G.
 set(WIMLIB_PREFIX ${CMAKE_BINARY_DIR}/wimlib)
 ExternalProject_Add(wimlib_ext
-    URL https://wimlib.net/downloads/wimlib-1.14.5.tar.gz
-    URL_HASH SHA256=84221a3abd5b91228f15f8e6065c335a336237b5738197b75bf419eea561a194
+    URL ${KILN_WIMLIB_URL}
+    URL_HASH SHA256=${KILN_WIMLIB_SHA256}
+    DOWNLOAD_DIR ${KILN_DOWNLOAD_DIR}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE  # tarball times, or make wants to rerun automake
     BUILD_IN_SOURCE ${KILN_IN_SOURCE}
     PATCH_COMMAND patch -p1 --forward --no-backup-if-mismatch
@@ -112,15 +123,18 @@ endif()
 # hivex 1.3.24 (LGPL-2.1+): the library only, static, to edit boot.wim's registry hive.
 set(HIVEX_PREFIX ${CMAKE_BINARY_DIR}/hivex)
 ExternalProject_Add(hivex_ext
-    URL https://download.libguestfs.org/hivex/hivex-1.3.24.tar.gz
-    URL_HASH SHA256=a52fa45cecc9a78adb2d28605d68261e4f1fd4514a778a5473013d2ccc8a193c
+    URL ${KILN_HIVEX_URL}
+    URL_HASH SHA256=${KILN_HIVEX_SHA256}
+    DOWNLOAD_DIR ${KILN_DOWNLOAD_DIR}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     BUILD_IN_SOURCE ${KILN_IN_SOURCE}
     CONFIGURE_COMMAND ${KILN_CONFIGURE} --prefix=<INSTALL_DIR> --disable-shared --enable-static
                       --disable-ocaml --disable-perl --disable-python --disable-ruby --disable-nls
                       --disable-dependency-tracking CC=${CMAKE_C_COMPILER}
-    BUILD_COMMAND make -j${NPROC} -C gnulib/lib && make -j${NPROC} -C lib
-    INSTALL_COMMAND make -C lib install && make -C include install
+                      # only the library is built: its man page and HTML (pod2man, pod2html) never are
+                      POD2MAN=false POD2TEXT=false
+    BUILD_COMMAND make -j${NPROC} -C gnulib/lib && make -j${NPROC} -C lib libhivex.la
+    INSTALL_COMMAND make -C lib install-libLTLIBRARIES && make -C include install
     INSTALL_DIR ${HIVEX_PREFIX}
     BUILD_BYPRODUCTS ${HIVEX_PREFIX}/lib/libhivex.a
 )
@@ -144,20 +158,17 @@ target_compile_options(xzembedded PRIVATE -w)  # upstream code, kept unmodified
 # from the official Linux release (archive pinned by SHA-256) and linked into
 # the programs that write Ventoy disks (src/ventoy_write.cpp). Offline builds:
 # -DKILN_VENTOY_ARCHIVE=/path/to/ventoy-<version>-linux.tar.gz.
-set(KILN_VENTOY_VERSION 1.1.18)
-set(KILN_VENTOY_SHA256 d86ff9de63d94c8b8f1f6b14d23c55af4b88e8207bf2893890892a6a97b1ad54)
 set(KILN_VENTOY_ARCHIVE "" CACHE FILEPATH "ventoy-${KILN_VENTOY_VERSION}-linux.tar.gz, already downloaded")
 set(VENTOY_DIR ${CMAKE_BINARY_DIR}/ventoy)
 set(VENTOY_ARCHIVE ${KILN_VENTOY_ARCHIVE})
 if(NOT VENTOY_ARCHIVE)
-    set(VENTOY_ARCHIVE ${VENTOY_DIR}/ventoy-${KILN_VENTOY_VERSION}-linux.tar.gz)
+    set(VENTOY_ARCHIVE ${KILN_DOWNLOAD_DIR}/ventoy-${KILN_VENTOY_VERSION}-linux.tar.gz)
     if(EXISTS ${VENTOY_ARCHIVE})
         file(SHA256 ${VENTOY_ARCHIVE} VENTOY_GOT)
     endif()
     if(NOT VENTOY_GOT STREQUAL KILN_VENTOY_SHA256)
         message(STATUS "Downloading Ventoy ${KILN_VENTOY_VERSION}")
-        file(DOWNLOAD https://github.com/ventoy/Ventoy/releases/download/v${KILN_VENTOY_VERSION}/ventoy-${KILN_VENTOY_VERSION}-linux.tar.gz
-             ${VENTOY_ARCHIVE} EXPECTED_HASH SHA256=${KILN_VENTOY_SHA256} TLS_VERIFY ON STATUS VENTOY_STATUS)
+        file(DOWNLOAD ${KILN_VENTOY_URL} ${VENTOY_ARCHIVE} EXPECTED_HASH SHA256=${KILN_VENTOY_SHA256} TLS_VERIFY ON STATUS VENTOY_STATUS)
         list(GET VENTOY_STATUS 0 VENTOY_RC)
         if(NOT VENTOY_RC EQUAL 0)
             message(FATAL_ERROR "Downloading Ventoy failed: ${VENTOY_STATUS}")
@@ -259,7 +270,6 @@ add_executable(kiln src/cli/main.cpp)
 target_link_libraries(kiln PRIVATE kilncore)
 kiln_executable(kiln)
 
-include(GNUInstallDirs)
 set(KILN_LIBEXEC_DIR ${CMAKE_INSTALL_FULL_LIBEXECDIR}/kiln)
 
 # The privileged writer behind the GUI (Linux: pkexec; Windows: UAC). Kept
@@ -284,7 +294,8 @@ if(KILN_GUI)
     find_package(Qt6 6.4 COMPONENTS ${KILN_QT_COMPONENTS})
     if(Qt6_FOUND)
         set(CMAKE_AUTOMOC ON)
-        add_executable(kiln-gui src/gui/main.cpp src/gui/mainwindow.cpp src/gui/mainwindow.hpp)
+        set(CMAKE_AUTORCC ON)
+        add_executable(kiln-gui src/gui/main.cpp src/gui/mainwindow.cpp src/gui/mainwindow.hpp data/icons/icons.qrc)
         target_link_libraries(kiln-gui PRIVATE kilncore Qt6::Widgets Qt6::Concurrent)
         kiln_executable(kiln-gui)
         if(KILN_WINDOWS)
@@ -345,4 +356,64 @@ if(KILN_LINUX)
     configure_file(data/io.github.trycoffee.kiln.policy.in io.github.trycoffee.kiln.policy @ONLY)
     install(FILES ${CMAKE_BINARY_DIR}/io.github.trycoffee.kiln.policy DESTINATION ${CMAKE_INSTALL_DATADIR}/polkit-1/actions)
     install(FILES data/kiln.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES data/icons/io.github.trycoffee.kiln.svg
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+    foreach(size 16 24 32 48 64 128 256 512)
+        install(FILES data/icons/kiln-${size}.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps
+                RENAME io.github.trycoffee.kiln.png)
+    endforeach()
 endif()
+
+# Licence texts: Kiln's own and those of everything built into it.
+if(KILN_LINUX)
+    set(KILN_LICENSE_DIR ${CMAKE_INSTALL_DATADIR}/licenses/kiln CACHE STRING "where the licence texts go")
+else()
+    set(KILN_LICENSE_DIR licenses CACHE STRING "where the licence texts go")
+endif()
+install(FILES LICENSE THIRD-PARTY-NOTICES.md DESTINATION ${KILN_LICENSE_DIR})
+install(FILES third_party/fatfs/LICENSE.txt DESTINATION ${KILN_LICENSE_DIR}/fatfs)
+install(FILES third_party/xz-embedded/LICENSE.txt DESTINATION ${KILN_LICENSE_DIR}/xz-embedded)
+install(DIRECTORY third_party/ventoy/License/ DESTINATION ${KILN_LICENSE_DIR}/ventoy)
+ExternalProject_Get_Property(wimlib_ext SOURCE_DIR)
+install(FILES ${SOURCE_DIR}/COPYING ${SOURCE_DIR}/COPYING.GPLv3 ${SOURCE_DIR}/COPYING.LGPL
+        DESTINATION ${KILN_LICENSE_DIR}/wimlib)
+ExternalProject_Get_Property(hivex_ext SOURCE_DIR)
+install(FILES ${SOURCE_DIR}/LICENSE DESTINATION ${KILN_LICENSE_DIR}/hivex)
+if(TARGET cdio_ext)
+    ExternalProject_Get_Property(cdio_ext SOURCE_DIR)
+    install(FILES ${SOURCE_DIR}/COPYING DESTINATION ${KILN_LICENSE_DIR}/libcdio)
+endif()
+option(KILN_DEBIAN_COPYRIGHT "Also write every licence into one Debian copyright file" OFF)
+if(KILN_DEBIAN_COPYRIGHT)  # last: it reads the licence texts installed above
+    install(CODE "set(KILN_LICENSE_ROOT \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KILN_LICENSE_DIR}\")
+                  include(\"${CMAKE_SOURCE_DIR}/cmake/debian-copyright.cmake\")")
+endif()
+
+# Packages: cpack -G DEB on Debian/Ubuntu, cpack -G RPM on Fedora (see packaging/linux/).
+set(CPACK_PACKAGE_NAME kiln)
+set(CPACK_PACKAGE_VENDOR "Kiln")
+set(CPACK_PACKAGE_CONTACT "TryCoffee <108859537+TryCoffee@users.noreply.github.com>")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/TryCoffee/kiln")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "USB flasher: verified image writes, Windows install sticks, Ventoy disks")
+set(CPACK_PACKAGE_DESCRIPTION "Kiln writes bootable images to USB drives and SD cards and verifies them,
+builds Windows install sticks from a Windows ISO (with optional Rufus-style
+setup tweaks) and makes Ventoy disks. Only removable drives are offered.")
+set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_SOURCE_DIR}/LICENSE)
+set(CPACK_STRIP_FILES ON)
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SECTION admin)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "pkexec")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "polkitd")
+set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/System")
+set(CPACK_RPM_PACKAGE_REQUIRES "polkit")
+set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+    /usr/libexec /usr/share/applications /usr/share/licenses /usr/share/polkit-1 /usr/share/polkit-1/actions
+    /usr/share/icons /usr/share/icons/hicolor /usr/share/icons/hicolor/scalable /usr/share/icons/hicolor/scalable/apps
+    /usr/share/icons/hicolor/16x16 /usr/share/icons/hicolor/16x16/apps /usr/share/icons/hicolor/24x24 /usr/share/icons/hicolor/24x24/apps
+    /usr/share/icons/hicolor/32x32 /usr/share/icons/hicolor/32x32/apps /usr/share/icons/hicolor/48x48 /usr/share/icons/hicolor/48x48/apps
+    /usr/share/icons/hicolor/64x64 /usr/share/icons/hicolor/64x64/apps /usr/share/icons/hicolor/128x128 /usr/share/icons/hicolor/128x128/apps
+    /usr/share/icons/hicolor/256x256 /usr/share/icons/hicolor/256x256/apps /usr/share/icons/hicolor/512x512 /usr/share/icons/hicolor/512x512/apps)
+include(CPack)

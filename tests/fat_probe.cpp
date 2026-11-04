@@ -227,8 +227,8 @@ int main() {
         // Checked before any file is written: FatFs zeroes a written file's
         // last-access time on exFAT, which exfat-utils' fsck reports.
         const std::string fsck_ex = run("LC_ALL=C fsck.exfat -n " + img.string());
-        check(fsck_ex.find("EXIT-FAILED") == std::string::npos && fsck_ex.find("32 KB") != std::string::npos,
-              "fsck.exfat: the new exFAT volume is clean, 32 KiB clusters");
+        check(fsck_ex.find("EXIT-FAILED") == std::string::npos, "fsck.exfat: the new exFAT volume is clean");
+        check(probe::exfat_cluster_bytes(img) == 32768, "exFAT boot sector: 32 KiB clusters");
         check(run("exfatlabel " + img.string()).find("Pendrive 1") != std::string::npos, "exfatlabel reads the label");
         {
             FatVolume vol(t, 0, 300 * mib);

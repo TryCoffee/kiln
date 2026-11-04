@@ -1,0 +1,5 @@
+# Build image for the Arch package (makepkg refuses to run as root: user "builder").
+FROM archlinux:base-devel
+RUN pacman -Syu --noconfirm --needed cmake ninja qt6-base polkit util-linux dosfstools mtools exfatprogs xz libxml2 \
+ && pacman -Scc --noconfirm \
+ && useradd -m builder

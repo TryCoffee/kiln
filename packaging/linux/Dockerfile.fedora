@@ -1,0 +1,5 @@
+# Build image for the .rpm (Fedora 44).
+FROM fedora:44
+RUN dnf -y install gcc gcc-c++ make cmake ninja-build pkgconf patch rpm-build redhat-rpm-config \
+      qt6-qtbase-devel util-linux dosfstools mtools exfatprogs xz libxml2 \
+ && dnf clean all

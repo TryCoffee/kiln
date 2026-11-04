@@ -7,6 +7,7 @@
 #include "mainwindow.hpp"
 
 #include <QApplication>
+#include <QIcon>
 #include <QTimer>
 
 int main(int argc, char** argv) {
@@ -15,7 +16,11 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName(QStringLiteral("kiln"));
     QApplication::setApplicationVersion(QStringLiteral(KILN_VERSION));
     QApplication::setDesktopFileName(QStringLiteral("kiln"));
-    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("media-flash")));
+    // The installed theme icon when there is one, else the copy built in (Windows, macOS, a build tree).
+    QIcon builtIn;
+    for (int size : {16, 24, 32, 48, 64, 128, 256, 512})
+        builtIn.addFile(QStringLiteral(":/icons/kiln-%1.png").arg(size), QSize(size, size));
+    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("io.github.trycoffee.kiln"), builtIn));
 
     QStringList args = QApplication::arguments().mid(1);
     QString shot;

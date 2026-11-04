@@ -1,0 +1,75 @@
+# Builds the Linux packages with the same scripts as a local build
+# (packaging/linux/build.sh, offline in a container), installs each on fresh
+# containers (smoke-test.sh), and on a v* tag attaches the packages and the
+# source archives to that tag's GitHub release.
+name: Linux packages
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian
+            pattern: '*.deb'
+            test_on: debian ubuntu
+          - distro: fedora
+            pattern: '*.rpm'
+            test_on: fedora
+          - distro: arch
+            pattern: '*.pkg.tar.zst'
+            test_on: arch
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: packaging/linux/build.sh ${{ matrix.distro }} dist
+      - name: Install and run on fresh containers
+        run: |
+          for t in ${{ matrix.test_on }}; do
+            packaging/linux/smoke-test.sh "$t" dist/${{ matrix.pattern }} dist/screenshots
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiln-${{ matrix.distro }}
+          path: |
+            dist/${{ matrix.pattern }}
+            dist/screenshots/
+      - if: matrix.distro == 'debian'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiln-sources
+          path: |
+            dist/kiln-*.tar.gz
+            dist/sources/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          files=$(find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' \
+                  -o -name 'kiln-*.tar.gz' -o -path '*/sources/*' \) | sort)
+          for f in $files; do (cd "$(dirname "$f")" && sha256sum "$(basename "$f")"); done > SHA256SUMS
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "Kiln ${TAG#v}" --notes ""
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber $files SHA256SUMS
