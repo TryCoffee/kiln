@@ -27,7 +27,7 @@ jobs:
             pattern: '*.rpm'
             test_on: fedora
           - distro: arch
-            pattern: '*.pkg.tar.zst'
+            pattern: 'kiln-[0-9]*.pkg.tar.zst'  # not makepkg's kiln-debug-*
             test_on: arch
     steps:
       - uses: actions/checkout@v4
