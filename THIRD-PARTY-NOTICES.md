@@ -18,7 +18,9 @@ The Ventoy files are taken unmodified from Ventoy's official release. They
 are written onto a drive only when you make a Ventoy disk.
 
 The graphical interface uses the Qt toolkit (LGPL-3.0), linked as a shared
-library: on Linux it is your distribution's Qt package.
+library: on Linux it is your distribution's Qt package. The macOS app carries
+Qt's official build in `Kiln.app/Contents/Frameworks` and `PlugIns`; what those
+files contain, their licences and where Qt's source is: `qt/NOTICES.md`.
 
 Kiln's code for building the Windows answer file (`src/unattend.cpp`) is
 ported from Rufus (GPL-3.0-or-later), with attribution in that file.

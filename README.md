@@ -44,7 +44,7 @@ Licensed under the GNU GPL v3 or later (see `LICENSE`).
 | Raw write + verify | yes | yes | yes |
 | Windows install sticks | yes | yes | yes |
 | Ventoy disks | yes | yes | yes |
-| Ready-made packages | Arch, Debian/Ubuntu, Fedora | not yet | not yet |
+| Ready-made packages | Arch, Debian/Ubuntu, Fedora | not yet | Apple silicon, macOS 14.4+ |
 
 ## Installing on Linux
 
@@ -61,7 +61,23 @@ pkexec through your package manager.
 
 `SHA256SUMS` in the release lists every file's checksum. The Arch package is
 built from `packaging/arch/PKGBUILD`, which also works with `makepkg` on its own.
-Other platforms: build from source (below).
+
+## Installing on macOS
+
+`Kiln-VERSION-arm64.dmg` from the
+[release](https://github.com/TryCoffee/kiln/releases), for Macs with Apple
+silicon on macOS 14.4 or newer. Open it and drag Kiln to Applications.
+
+Kiln is not signed with an Apple Developer ID, so macOS refuses the first
+start of a downloaded copy. To allow it once: try to open Kiln, then in System
+Settings > Privacy & Security choose "Open Anyway" for Kiln.
+
+The command line is inside the app:
+
+    /Applications/Kiln.app/Contents/Helpers/kiln list
+    sudo ln -s /Applications/Kiln.app/Contents/Helpers/kiln /usr/local/bin/kiln   # optional
+
+Windows: build from source (below).
 
 ## What Kiln will never write to
 
@@ -223,7 +239,9 @@ checkers; a missing tool marks a test skipped, not passed.
 - **Windows:** MSYS2's UCRT64 toolchain (GCC, CMake, Ninja, `patch`, Qt 6).
   libcdio, wimlib and hivex are built from source. Windows 10 1903 or newer.
 - **macOS:** Xcode command line tools, CMake, Ninja, Qt 6
-  (`-DCMAKE_PREFIX_PATH=<qt>`); libcdio is built from source.
+  (`-DCMAKE_PREFIX_PATH=<qt>`). `packaging/macos/make-dmg.sh <qt>` builds the
+  app and the disk image the way the releases are made (with Qt's official
+  build, e.g. `aqt install-qt mac desktop 6.12.0 clang_64 --archives qtbase`).
 
 ## Third-party code
 

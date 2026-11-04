@@ -305,10 +305,43 @@ if(KILN_GUI)
         target_compile_definitions(kiln-gui PRIVATE KILN_LIBEXEC_DIR="${KILN_LIBEXEC_DIR}"
                                    QT_NO_CAST_FROM_ASCII QT_NO_URL_CAST_FROM_STRING)
         if(KILN_MACOS)
+            # Kiln.app: the icon (an .icns made from the PNGs by iconutil) and Kiln's own Info.plist.
+            set(KILN_ICONSET ${CMAKE_BINARY_DIR}/kiln.iconset)
+            set(KILN_ICNS ${CMAKE_BINARY_DIR}/kiln.icns)
+            set(icon_copies)
+            foreach(pair 16:16x16 32:16x16@2x 32:32x32 64:32x32@2x 128:128x128 256:128x128@2x
+                         256:256x256 512:256x256@2x 512:512x512 1024:512x512@2x)
+                string(REPLACE ":" ";" pair ${pair})
+                list(GET pair 0 px)
+                list(GET pair 1 name)
+                list(APPEND icon_copies COMMAND ${CMAKE_COMMAND} -E copy
+                     ${CMAKE_SOURCE_DIR}/data/icons/kiln-${px}.png ${KILN_ICONSET}/icon_${name}.png)
+            endforeach()
+            add_custom_command(OUTPUT ${KILN_ICNS}
+                COMMAND ${CMAKE_COMMAND} -E rm -rf ${KILN_ICONSET}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${KILN_ICONSET}
+                ${icon_copies}
+                COMMAND iconutil -c icns -o ${KILN_ICNS} ${KILN_ICONSET}
+                DEPENDS data/icons/kiln-16.png data/icons/kiln-32.png data/icons/kiln-64.png data/icons/kiln-128.png
+                        data/icons/kiln-256.png data/icons/kiln-512.png data/icons/kiln-1024.png
+                COMMENT "Making kiln.icns")
+            target_sources(kiln-gui PRIVATE ${KILN_ICNS})
+            set_source_files_properties(${KILN_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+            set(KILN_MACOS_MINIMUM ${CMAKE_OSX_DEPLOYMENT_TARGET})
+            if(NOT KILN_MACOS_MINIMUM)
+                set(KILN_MACOS_MINIMUM 14.4)  # the official Qt 6.12's own minimum
+            endif()
             set_target_properties(kiln-gui PROPERTIES MACOSX_BUNDLE TRUE OUTPUT_NAME Kiln
+                                  MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/data/Info.plist.in
                                   MACOSX_BUNDLE_BUNDLE_NAME Kiln
                                   MACOSX_BUNDLE_GUI_IDENTIFIER io.github.trycoffee.kiln
-                                  MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+                                  MACOSX_BUNDLE_ICON_FILE kiln.icns
+                                  MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+                                  MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+                                  # the app's own Frameworks/, and (until macdeployqt has copied Qt
+                                  # in and packaging/macos/make-dmg.sh drops it) Qt's lib/
+                                  INSTALL_RPATH "@executable_path/../Frameworks"
+                                  INSTALL_RPATH_USE_LINK_PATH ON)
         endif()
         install(TARGETS kiln-gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} BUNDLE DESTINATION .)
     else()
@@ -347,7 +380,13 @@ if(BUILD_TESTING)
              COMMAND sh -c "! nm -g --defined-only '${WIMLIB_PREFIX}/lib/libwim.a' | grep -E ' _?full_(read|write)$'")
 endif()
 
-install(TARGETS kiln RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(KILN_MACOS AND TARGET kiln-gui)
+    # The command line inside the app (macOS: "kiln" and "Kiln" would be one name in
+    # Contents/MacOS on a case-insensitive disk): Kiln.app/Contents/Helpers/kiln.
+    install(TARGETS kiln RUNTIME DESTINATION Kiln.app/Contents/Helpers)
+else()
+    install(TARGETS kiln RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 if(KILN_WINDOWS)
     install(TARGETS kiln-helper RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})  # the GUI looks beside itself
 endif()
@@ -367,6 +406,8 @@ endif()
 # Licence texts: Kiln's own and those of everything built into it.
 if(KILN_LINUX)
     set(KILN_LICENSE_DIR ${CMAKE_INSTALL_DATADIR}/licenses/kiln CACHE STRING "where the licence texts go")
+elseif(KILN_MACOS AND TARGET kiln-gui)
+    set(KILN_LICENSE_DIR Kiln.app/Contents/Resources/licenses CACHE STRING "where the licence texts go")
 else()
     set(KILN_LICENSE_DIR licenses CACHE STRING "where the licence texts go")
 endif()

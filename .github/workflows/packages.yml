@@ -1,8 +1,9 @@
-# Builds the Linux packages with the same scripts as a local build
-# (packaging/linux/build.sh, offline in a container), installs each on fresh
-# containers (smoke-test.sh), and on a v* tag attaches the packages and the
-# source archives to that tag's GitHub release.
-name: Linux packages
+# Builds every package with the same scripts as a local build: Linux
+# (packaging/linux/build.sh, offline in a container; smoke-test.sh installs each
+# on fresh containers) and macOS (packaging/macos/make-dmg.sh with Qt's official
+# build). On a v* tag, attaches the packages and the source archives to a draft
+# release.
+name: Packages
 
 on:
   push:
@@ -52,9 +53,33 @@ jobs:
             dist/kiln-*.tar.gz
             dist/sources/
 
+  macos:
+    runs-on: macos-15
+    env:
+      QT_VERSION: 6.12.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          # The newest Xcode on the runner (C23 #embed needs a recent Apple clang).
+          xcode=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+          clang --version | head -1
+          brew install ninja
+      - name: Qt (official build)
+        run: pipx run --spec aqtinstall==3.3.0 aqt install-qt mac desktop "$QT_VERSION" clang_64 --archives qtbase -O "$RUNNER_TEMP/qt"
+      - name: Build Kiln.app and the disk image
+        run: packaging/macos/make-dmg.sh "$RUNNER_TEMP/qt/$QT_VERSION/macos" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiln-macos
+          path: |
+            dist/Kiln-*.dmg
+            dist/gui-macos.png
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: package
+    needs: [package, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -67,7 +92,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          files=$(find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' \
+          files=$(find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*.dmg' \
                   -o -name 'kiln-*.tar.gz' -o -path '*/sources/*' \) | sort)
           for f in $files; do (cd "$(dirname "$f")" && sha256sum "$(basename "$f")"); done > SHA256SUMS
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
