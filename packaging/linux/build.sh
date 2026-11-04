@@ -38,6 +38,6 @@ arch)
     cp "$src/packaging/arch/PKGBUILD" "$tarball" "$dl"/* "$pkg/"
     chmod -R a+rwX "$work"
     docker run --rm --network none -v "$pkg:/pkg" -v "$out:/out" -e OWNER="$(id -u):$(id -g)" "$image" \
-        sh -c 'cd /pkg && su builder -c "makepkg -f --noconfirm" && install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 644 /pkg/*.pkg.tar.zst /out/' ;;
+        sh -c 'cd /pkg && su builder -c "makepkg -f --noconfirm" && install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 644 /pkg/*.pkg.tar.zst /out/; rc=$?; chown -R "$OWNER" /pkg; exit $rc' ;;
 esac
 ls -l "$out"
