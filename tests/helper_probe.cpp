@@ -8,6 +8,10 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 #include <clocale>
@@ -195,5 +199,44 @@ int main() {
     } else {
         check(false, "could not run kiln-helper");
     }
+#ifndef _WIN32
+    // Started by the GUI, its stdin is a pipe the GUI keeps open until the helper
+    // exits: once it has reported, it must exit on its own. (0.1.0 hung in exit():
+    // its stdin reader held stdin's stdio lock, which glibc's exit takes.)
+    int in[2], outp[2];
+    if (pipe(in) == 0 && pipe(outp) == 0) {
+        const pid_t pid = fork();
+        if (pid == 0) {
+            dup2(in[0], 0);
+            dup2(outp[1], 1);
+            dup2(outp[1], 2);
+            for (int fd : {in[0], in[1], outp[0], outp[1]}) close(fd);
+            execl(KILN_HELPER_PATH, "kiln-helper", "write", "sdz", "/etc/hostname", static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        close(in[0]);
+        close(outp[1]);
+        bool exited = false;
+        int status = 0;
+        for (int i = 0; i < 100 && !exited; ++i) {  // up to 5 s; a working helper takes milliseconds
+            if (waitpid(pid, &status, WNOHANG) == pid)
+                exited = true;
+            else
+                usleep(50000);
+        }
+        if (!exited) {
+            kill(pid, SIGKILL);
+            waitpid(pid, &status, 0);
+        }
+        std::string said;
+        char buf[512];
+        for (ssize_t n; (n = read(outp[0], buf, sizeof buf)) > 0;) said.append(buf, static_cast<size_t>(n));
+        close(in[1]);
+        close(outp[0]);
+        check(exited && said.find(expect) == 0, "helper exits after its result while its stdin stays open: " + said);
+    } else {
+        check(false, "could not make pipes");
+    }
+#endif
     return probe::finish("helper_probe");
 }

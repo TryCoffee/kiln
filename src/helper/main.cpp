@@ -131,14 +131,25 @@ int main(int argc, char** argv) {
     // So run by hand, it needs a live stdin: `sudo kiln-helper ... < /dev/null`
     // cancels at once. Read char by char with a bounded buffer: stdin belongs to
     // the caller, and an endless line must not grow memory in a root process.
+    // Plain read(2), not std::cin: a thread blocked in std::cin holds stdin's
+    // stdio lock, and glibc's exit() takes every stream's lock to flush them,
+    // so the helper hung after its result until the GUI closed the pipe, which
+    // the GUI only does once the helper has exited (Kiln 0.1.0).
     std::thread([] {
         std::string line;
-        for (int c; (c = std::cin.get()) != EOF;) {
-            if (c == '\n') {
-                if (line == "cancel") break;
-                line.clear();
-            } else if (line.size() < 16) {
-                line += static_cast<char>(c);
+        char buf[256];
+        bool cancel = false;
+        while (!cancel) {
+            const ssize_t n = ::read(STDIN_FILENO, buf, sizeof buf);
+            if (n < 0 && errno == EINTR) continue;  // a signal: on_signal has already set g_cancel
+            if (n <= 0) break;
+            for (ssize_t i = 0; i < n && !cancel; ++i) {
+                if (buf[i] == '\n') {
+                    cancel = line == "cancel";
+                    line.clear();
+                } else if (line.size() < 16) {
+                    line += buf[i];
+                }
             }
         }
         g_cancel = true;
