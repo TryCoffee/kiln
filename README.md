@@ -129,6 +129,10 @@ The Arch package is built from `packaging/arch/PKGBUILD`, which also works with 
 | Admin prompt | polkit | UAC | macOS's own dialog |
 | Packages | Arch, Debian/Ubuntu, Fedora | installer, zip | DMG |
 
+## Updates
+
+When its window opens, Kiln asks GitHub whether a newer release is out and, if one is, offers to open its download page. That is one request to `api.github.com` carrying only Kiln's version (GitHub sees your IP address, as with any web request); Kiln updates nothing by itself. Skip a version from the popup, or turn the check off with the environment variable `KILN_NO_UPDATE_CHECK=1`. Packagers whose updates come from elsewhere can build without it: `-DKILN_UPDATE_CHECK=OFF`.
+
 ## Command line
 
 ```sh
@@ -217,7 +221,7 @@ Not tested yet: a physical stick on Windows; the GUI's admin prompt on Windows (
 
 <br>
 
-Needs CMake 3.25+, a C/C++20 compiler whose C side knows C23's `#embed` (GCC 15+, Clang 19+; on Debian 13 use `-DCMAKE_C_COMPILER=clang-19`), `make` and `patch`, and Qt 6.4+ Widgets for the GUI (`-DKILN_GUI=OFF` builds without it). CMake builds libcdio 2.4.0, wimlib 1.14.5 and hivex 1.3.24 from source and takes three files from Ventoy 1.1.18's release, all pinned by SHA-256 (`cmake/third-party.cmake`).
+Needs CMake 3.25+, a C/C++20 compiler whose C side knows C23's `#embed` (GCC 15+, Clang 19+; on Debian 13 use `-DCMAKE_C_COMPILER=clang-19`), `make` and `patch`, and Qt 6.4+ Widgets and Network for the GUI (`-DKILN_GUI=OFF` builds without it). CMake builds libcdio 2.4.0, wimlib 1.14.5 and hivex 1.3.24 from source and takes three files from Ventoy 1.1.18's release, all pinned by SHA-256 (`cmake/third-party.cmake`).
 
 ```sh
 cmake -S . -B build -G Ninja

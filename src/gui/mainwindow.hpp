@@ -12,6 +12,7 @@
 #include <QFutureWatcher>
 #include <QMainWindow>
 #include <QProcess>
+#include <QUrl>
 
 #include <atomic>
 #include <optional>
@@ -51,6 +52,8 @@ public:
     void openImage(const QString& path);
     // For screenshots/tests: switch to making a Ventoy disk.
     void chooseVentoy();
+    // Ask GitHub once whether a newer Kiln is out; a popup if so (after any running write).
+    void checkForUpdates();
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -79,6 +82,7 @@ private:
     QString helperPath() const;
     void loadSettings();
     void saveSettings() const;
+    void showUpdate();
 
     QComboBox* devices_ = nullptr;
     QLabel* deviceNote_ = nullptr;
@@ -129,6 +133,8 @@ private:
     int stage_ = -1;              // current Stage, for the speed figure
     qint64 stageStartMs_ = 0;
     QString writingTo_;
+    QString updateVersion_;       // a newer release not shown yet (held during a write)
+    QUrl updatePage_;
 };
 
 }  // namespace kiln

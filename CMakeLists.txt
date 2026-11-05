@@ -323,10 +323,13 @@ if(TARGET kiln-helper)
 endif()
 
 option(KILN_GUI "Build the Qt6 GUI" ON)
+# At every start the GUI asks GitHub whether a newer release is out (one HTTPS request,
+# a popup if so). Off for builds whose updates come from elsewhere, e.g. a distribution.
+option(KILN_UPDATE_CHECK "GUI: check GitHub for a newer release at start" ON)
 if(KILN_GUI)
     set(KILN_QT_COMPONENTS Widgets Concurrent)
-    if(KILN_WINDOWS)
-        list(APPEND KILN_QT_COMPONENTS Network)  # QLocalServer: the helper's pipe
+    if(KILN_WINDOWS OR KILN_UPDATE_CHECK)
+        list(APPEND KILN_QT_COMPONENTS Network)  # Windows: QLocalServer, the helper's pipe; the update check
     endif()
     find_package(Qt6 6.4 COMPONENTS ${KILN_QT_COMPONENTS})
     if(Qt6_FOUND)
@@ -335,8 +338,16 @@ if(KILN_GUI)
         add_executable(kiln-gui src/gui/main.cpp src/gui/mainwindow.cpp src/gui/mainwindow.hpp data/icons/icons.qrc)
         target_link_libraries(kiln-gui PRIVATE kilncore Qt6::Widgets Qt6::Concurrent)
         kiln_executable(kiln-gui)
-        if(KILN_WINDOWS)
+        if(KILN_WINDOWS OR KILN_UPDATE_CHECK)
             target_link_libraries(kiln-gui PRIVATE Qt6::Network)
+        endif()
+        if(KILN_UPDATE_CHECK)
+            target_sources(kiln-gui PRIVATE src/gui/updatecheck.cpp src/gui/updatecheck.hpp)
+            target_compile_definitions(kiln-gui PRIVATE KILN_UPDATE_CHECK=1)
+        else()
+            target_compile_definitions(kiln-gui PRIVATE KILN_UPDATE_CHECK=0)
+        endif()
+        if(KILN_WINDOWS)
             set_target_properties(kiln-gui PROPERTIES WIN32_EXECUTABLE TRUE)
         endif()
         target_compile_definitions(kiln-gui PRIVATE KILN_LIBEXEC_DIR="${KILN_LIBEXEC_DIR}"
@@ -388,7 +399,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    set(probes image_probe writer_probe gpt_probe fat_probe unattend_probe ventoy_probe)
+    set(probes image_probe writer_probe gpt_probe fat_probe unattend_probe ventoy_probe version_probe)
     if(KILN_LINUX)
         list(APPEND probes device_probe helper_probe)  # a fake sysfs; the pkexec helper
     elseif(KILN_MACOS)

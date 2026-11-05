@@ -56,8 +56,12 @@ for e in kiln kiln-gui kiln-helper; do [ -f "$stage/$e.exe" ] || fail "the insta
 # --release: windeployqt reads every DLL of Qt's llvm-mingw build as "debug" (they
 # carry debug-info sections), so --release would leave out qwindows.dll itself.
 "$QT/bin/windeployqt6.exe" --no-translations --no-compiler-runtime --no-opengl-sw \
-    --no-system-d3d-compiler --no-system-dxc-compiler --skip-plugin-types tls,networkinformation,generic \
+    --no-system-d3d-compiler --no-system-dxc-compiler --skip-plugin-types networkinformation,generic \
     "$(win "$stage/kiln-gui.exe")"
+# The update check's HTTPS goes through Windows' own TLS (Schannel). The OpenSSL backend
+# would need OpenSSL's DLLs (not shipped) and the cert-only one does no TLS.
+[ -f "$stage/tls/qschannelbackend.dll" ] || fail "windeployqt did not deploy tls/qschannelbackend.dll"
+rm -f "$stage/tls/qopensslbackend.dll" "$stage/tls/qcertonlybackend.dll"
 cp "$rt/bin/libc++.dll" "$rt/bin/libunwind.dll" "$rt/bin/libwinpthread-1.dll" "$stage/"
 mkdir -p "$stage/licenses/llvm-mingw"
 cp "$LLVM/LICENSE.TXT" "$rt/share/mingw32/COPYING.MinGW-w64-runtime.txt" "$rt/share/mingw32/COPYING.winpthreads.txt" \

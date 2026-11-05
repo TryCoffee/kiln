@@ -1,6 +1,10 @@
 // mainwindow.cpp
 #include "mainwindow.hpp"
 
+#if KILN_UPDATE_CHECK
+#include "updatecheck.hpp"
+#endif
+
 #include "blockio.hpp"
 #include "helper_protocol.hpp"
 #include "job.hpp"
@@ -12,6 +16,7 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -28,6 +33,8 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent>
+
+#include <utility>
 
 #ifdef _WIN32
 #include <QDir>
@@ -296,6 +303,41 @@ void MainWindow::modeChanged() {
 }
 
 void MainWindow::chooseVentoy() { modeVentoy_->setChecked(true); }
+
+void MainWindow::checkForUpdates() {
+#if KILN_UPDATE_CHECK
+    const QByteArray off = qgetenv("KILN_NO_UPDATE_CHECK");
+    if (!off.isEmpty() && off != "0") return;
+    auto* check = new UpdateCheck(this);
+    connect(check, &UpdateCheck::available, this, [this, check](const QString& version, const QUrl& page) {
+        check->deleteLater();
+        if (QSettings().value(QStringLiteral("updates/skip")).toString() == version) return;
+        updateVersion_ = version;
+        updatePage_ = page;
+        showUpdate();  // or after the write, if one is running
+    });
+    check->start();
+#endif
+}
+
+void MainWindow::showUpdate() {
+    if (updateVersion_.isEmpty() || busy_) return;
+    const QString version = std::exchange(updateVersion_, QString());
+    QMessageBox box(QMessageBox::Information, tr("Kiln %1 is available").arg(version),
+                    tr("<b>Kiln %1 is available.</b><br>You have %2.")
+                        .arg(version.toHtmlEscaped(), QStringLiteral(KILN_VERSION)),
+                    QMessageBox::NoButton, this);
+    QPushButton* download = box.addButton(tr("Download"), QMessageBox::AcceptRole);
+    QPushButton* skip = box.addButton(tr("Skip this version"), QMessageBox::ActionRole);
+    QPushButton* later = box.addButton(tr("Later"), QMessageBox::RejectRole);
+    box.setDefaultButton(download);
+    box.setEscapeButton(later);
+    box.exec();
+    if (box.clickedButton() == download)
+        QDesktopServices::openUrl(updatePage_);
+    else if (box.clickedButton() == skip)
+        QSettings().setValue(QStringLiteral("updates/skip"), version);
+}
 
 void MainWindow::openImage(const QString& path) {
     modeImage_->setChecked(true);
@@ -711,7 +753,11 @@ void MainWindow::finishRun() {
     busy_ = false;
     setBusy(false);
     refreshDevices();
-    if (closeWhenDone_) close();
+    if (closeWhenDone_) {
+        close();
+        return;
+    }
+    if (!updateVersion_.isEmpty()) QTimer::singleShot(0, this, &MainWindow::showUpdate);  // held during the write
 }
 
 void MainWindow::setBusy(bool busy) {

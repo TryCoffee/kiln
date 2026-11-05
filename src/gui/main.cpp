@@ -33,7 +33,9 @@ int main(int argc, char** argv) {
     w.show();
     if (!args.isEmpty() && args[0] == QLatin1String("--ventoy")) w.chooseVentoy();
     else if (!args.isEmpty()) w.openImage(args[0]);
-    if (!shot.isEmpty())
+    if (shot.isEmpty())
+        w.checkForUpdates();  // not for screenshots: those run in tests and must not use the network
+    else
         QTimer::singleShot(4000, &w, [&w, shot] {  // time for the image to be inspected
             w.grab().save(shot);
             QApplication::quit();
