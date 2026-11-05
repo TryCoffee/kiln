@@ -1,6 +1,6 @@
 # Maintainer: TryCoffee <108859537+TryCoffee@users.noreply.github.com>
 pkgname=kiln
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='USB flasher: verified image writes, Windows install sticks, Ventoy disks'
 arch=(x86_64)
@@ -36,5 +36,10 @@ check() {
 }
 
 package() {
+  # Qt's libraries are versioned per minor release: a build against Qt 6.12 does not start
+  # on 6.11 ("version `Qt_6.12' not found"). Require the qt6-base it was built against.
+  local qt
+  qt=$(pacman -Q qt6-base | cut -d' ' -f2)
+  depends=("${depends[@]/#qt6-base/qt6-base>=${qt%-*}}")
   DESTDIR="$pkgdir" cmake --install build
 }

@@ -1,5 +1,5 @@
 ; Kiln's Windows installer (Inno Setup 6). Built by packaging/windows/make-installer.sh:
-;   ISCC /DVERSION=0.1.0 /DSRC=<staged files> /DOUT=<output dir> /DICON=<kiln.ico> kiln.iss
+;   ISCC /DVERSION=0.1.1 /DSRC=<staged files> /DOUT=<output dir> /DICON=<kiln.ico> kiln.iss
 #ifndef VERSION
   #error VERSION is not defined
 #endif
