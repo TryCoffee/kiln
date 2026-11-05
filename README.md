@@ -21,6 +21,8 @@
   <a href="https://github.com/TryCoffee/kiln/releases/latest"><img alt="Download for macOS" src="https://img.shields.io/badge/Download-macOS-111111?style=for-the-badge"></a>
   <a href="https://github.com/TryCoffee/kiln/releases/latest"><img alt="Download for Linux" src="https://img.shields.io/badge/Download-Linux-c94f1c?style=for-the-badge"></a>
   <br>
+  <a href="https://kiln-usb.pages.dev"><b>kiln-usb.pages.dev</b></a>
+  <br>
   <sub>Windows 10 (1903) or newer, x64 · macOS 14.4 or newer, Apple silicon · Arch, Debian 13, Ubuntu 26.04, Fedora 44 · free software, GPL v3</sub>
 </p>
 
