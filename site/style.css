@@ -59,7 +59,9 @@ main, .top, footer { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
 .hero-icon { filter: drop-shadow(0 12px 28px rgba(226, 64, 31, 0.35)); }
 .hero h1 {
   font-size: clamp(2.3rem, 6vw, 4rem); line-height: 1.08; letter-spacing: -0.02em;
-  margin: 26px 0 18px;
+  /* the gradient only paints the box: room below for g, y, p (they were cut off) */
+  padding-bottom: 0.14em;
+  margin: 26px 0 calc(18px - 0.14em);
   background: linear-gradient(180deg, var(--text) 40%, var(--accent-text));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
