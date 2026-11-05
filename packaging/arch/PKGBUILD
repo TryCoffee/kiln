@@ -1,6 +1,6 @@
 # Maintainer: TryCoffee <108859537+TryCoffee@users.noreply.github.com>
 pkgname=kiln
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='USB flasher: verified image writes, Windows install sticks, Ventoy disks'
 arch=(x86_64)
