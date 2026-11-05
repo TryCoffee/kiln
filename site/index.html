@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiln: bootable USB sticks, done right</title>
+  <meta name="description" content="Kiln writes bootable images to USB sticks and SD cards on Linux, Windows and macOS, verifies every byte, builds Windows 11 install sticks with Rufus-style tweaks and makes Ventoy disks. Free software.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#e2401f">
+  <link rel="icon" type="image/svg+xml" href="assets/kiln.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/kiln-512.png">
+  <link rel="stylesheet" href="style.css">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Kiln: bootable USB sticks, done right">
+  <meta property="og:description" content="Verified image writes, Windows 11 install sticks with Rufus-style tweaks, and Ventoy disks. Linux, Windows and macOS. Free software.">
+  <meta property="og:image" content="https://kiln-usb.pages.dev/assets/og.png">
+  <meta property="og:url" content="https://kiln-usb.pages.dev/">
+  <meta name="twitter:card" content="summary_large_image">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#"><img src="assets/kiln.svg" alt="" width="28" height="28"> Kiln</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/TryCoffee/kiln">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="hero-icon" src="assets/kiln.svg" alt="Kiln icon" width="112" height="112">
+      <h1>Bootable USB sticks,<br>done right.</h1>
+      <p class="lead">Kiln writes any bootable image to a USB stick or SD card and reads every byte back to prove it landed. It builds Windows 11 install sticks with the setup tweaks you would otherwise go looking for, and it makes Ventoy disks that boot every ISO you copy onto them.</p>
+
+      <div class="download">
+        <a class="button primary" id="dl-primary" href="https://github.com/TryCoffee/kiln/releases/latest">Download Kiln</a>
+        <div class="others" id="dl-others">
+          <a href="https://github.com/TryCoffee/kiln/releases/latest" data-os="windows">Windows</a>
+          <a href="https://github.com/TryCoffee/kiln/releases/latest" data-os="macos">macOS</a>
+          <a href="https://github.com/TryCoffee/kiln/releases/latest" data-os="linux">Linux</a>
+        </div>
+        <p class="fine" id="dl-version">Windows 10 (1903) or newer · macOS 14.4 or newer on Apple silicon · Arch, Debian 13, Ubuntu 26.04, Fedora 44 · free software under the GPL v3</p>
+      </div>
+    </section>
+
+    <section class="screens" aria-label="Screenshots">
+      <img src="assets/screens.png" alt="Kiln building a Windows 11 stick, writing a Linux ISO, and making a Ventoy disk" width="1600" height="716">
+    </section>
+
+    <section class="features" id="features">
+      <article>
+        <h2>Any image, verified</h2>
+        <p>Linux ISOs and disk images are written byte for byte, then read back and compared. On the command line, give it the image's SHA-256 (<code>--sha256</code>) and Kiln checks the image before a single byte reaches the stick.</p>
+      </article>
+      <article>
+        <h2>Windows 11, your way</h2>
+        <p>The stick is built from the ISO's files, with UEFI boot and Secure Boot left on. Skip the TPM, Secure Boot and RAM checks, set up a local account, and switch off BitLocker, OneDrive, Copilot and ads.</p>
+      </article>
+      <article>
+        <h2>One stick, every ISO</h2>
+        <p>Kiln lays out a <a href="https://www.ventoy.net">Ventoy</a> disk exactly as Ventoy's own installer does, MBR or GPT, with Secure Boot support if you want it. Copy ISO files onto it and pick one at boot.</p>
+      </article>
+    </section>
+
+    <section class="careful">
+      <h2>Careful by design</h2>
+      <ul>
+        <li><strong>It only offers removable drives.</strong> USB drives, SD cards and drives your system marks as removable. The disks your system runs from, internal disks and the drive the image is on never show up, followed through encryption, LVM, RAID and APFS down to the physical disk.</li>
+        <li><strong>It checks its own work.</strong> Every write is read back, every file of a Windows stick too, and a mismatch is reported down to the first differing byte.</li>
+        <li><strong>Only the write runs as administrator.</strong> The window you click in never does. Your system asks for the password once per write, in its own dialog.</li>
+        <li><strong>The same app everywhere.</strong> The same features, a window and a command line, on Linux, Windows and macOS.</li>
+      </ul>
+    </section>
+
+    <section class="install" id="install">
+      <h2>Install</h2>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="windows">Windows</button>
+        <button role="tab" aria-selected="false" data-tab="macos">macOS</button>
+        <button role="tab" aria-selected="false" data-tab="linux">Linux</button>
+      </div>
+
+      <div class="panel" data-panel="windows">
+        <p>Download <code>Kiln-…-x64-setup.exe</code> and run it, or unpack <code>Kiln-…-x64.zip</code> anywhere and run <code>kiln-gui.exe</code>. For 64-bit Windows 10 (1903) or newer.</p>
+        <p class="note">Kiln is not code-signed yet, so SmartScreen warns before the first start: choose <b>More info</b>, then <b>Run anyway</b>.</p>
+      </div>
+      <div class="panel" data-panel="macos" hidden>
+        <p>Download <code>Kiln-…-arm64.dmg</code>, open it and drag Kiln to Applications. For Macs with Apple silicon on macOS 14.4 or newer.</p>
+        <p class="note">Kiln is not signed with an Apple Developer ID yet, so macOS refuses the first start. Try to open Kiln once, then choose <b>Open Anyway</b> in System Settings, Privacy &amp; Security.</p>
+      </div>
+      <div class="panel" data-panel="linux" hidden>
+        <table>
+          <tr><th>Arch, CachyOS</th><td><code>sudo pacman -U kiln-*.pkg.tar.zst</code></td></tr>
+          <tr><th>Debian 13, Ubuntu 26.04</th><td><code>sudo apt install ./kiln_*_amd64.deb</code></td></tr>
+          <tr><th>Fedora 44</th><td><code>sudo dnf install ./kiln-*.x86_64.rpm</code></td></tr>
+        </table>
+        <p class="note">Each package pulls in Qt 6 and polkit through your package manager.</p>
+      </div>
+      <p class="fine">Every <a href="https://github.com/TryCoffee/kiln/releases/latest">release</a> lists each file's SHA-256 and carries the source of Kiln and of every GPL and LGPL component built into it.</p>
+    </section>
+
+    <section class="warning">
+      <p><strong>Kiln erases the whole drive you pick.</strong> Check the drive's name before you write. Kiln is early software: keep backups of anything you care about.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/TryCoffee/kiln">Source on GitHub</a> ·
+      <a href="https://github.com/TryCoffee/kiln/releases">Releases</a> ·
+      <a href="https://github.com/TryCoffee/kiln/issues">Report a bug</a>
+    </p>
+    <p class="fine">Kiln is free software under the GNU GPL v3 or later. Ventoy disks are made with Ventoy's own files; Ventoy is a project of its own. Windows, macOS and other names belong to their owners.</p>
+  </footer>
+</body>
+</html>
